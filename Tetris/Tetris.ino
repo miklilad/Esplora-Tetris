@@ -2,14 +2,16 @@
 #include <SPI.h>
 #include <TFT.h>   
 
-const double VERSION = 0.02;
+const double VERSION = 0.03;
 const int HIGH_SCORES_NUM = 8;
 enum STATES {MENU, GAME, SCOREBOARD, CREDITS};
-int STATE = MENU;
+byte STATE = MENU;
 bool state_changed = true;
-int MenuPos = 50;
+byte MenuPos = 50;
 int HighScores[HIGH_SCORES_NUM];
-enum Colors {RED,ORANGE,YELLOW,PURPLE,BLUE,GREEN};
+enum Colors {RED,ORANGE,YELLOW,PURPLE,BLUE,GREEN,CYAN};
+int timer = 500;
+const byte blockSize = 6;
 
 class Block
 {
@@ -23,23 +25,124 @@ class Block
     
 };
 
+void DrawSquare(byte x, byte y, Colors color)
+{
+  switch(color)
+  {
+    case RED:     EsploraTFT.fill(255,0,0); break;
+    case ORANGE:  EsploraTFT.fill(255,153,51); break;
+    case YELLOW:  EsploraTFT.fill(255,255,0); break;
+    case PURPLE:  EsploraTFT.fill(153,51,255); break;
+    case BLUE:    EsploraTFT.fill(51,102,255); break;
+    case GREEN:   EsploraTFT.fill(102,255,51); break;
+    case CYAN:    EsploraTFT.fill(51,255,255); break;
+  }
+  EsploraTFT.rect(x*blockSize+50,y*blockSize+5,blockSize,blockSize);
+}
+
 class Tetromino
 {
   protected:
     byte posX, posY;
   public:
-    Tetromino(byte x = 5, byte y = 0) : posX(x), posY(y) {}
+    Tetromino() {posX = 5; posY = 0;}
+    virtual void Rotate() = 0;
+};
+
+class IPiece : public Tetromino
+{
+  Block blocks[4][4];
+  public:
+    IPiece() 
+    {
+      Serial.println("IPiece Created");
+    }
+    void Rotate() override
+    {
+      
+    }
+};
+
+class Piece3 : public Tetromino
+{
+  protected:
+    Block blocks[3][3];
+    void Rotate() override
+    {
+      
+    }
+};
+
+class OPiece : public Piece3
+{
+  
+};
+
+class TPiece : public Piece3
+{
+  
+};
+
+class SPiece : public Piece3
+{
+  
+};
+
+class ZPiece : public Piece3
+{
+  
+};
+
+class JPiece : public Piece3
+{
+  
+};
+
+class LPiece : public Piece3
+{
+  
+};
+
+class Playfield
+{
+  public:
+    Block field[10][20];
 };
 
 void play()
 {
-  Block playfield[10][20];
+  //Block playfield[10][20];
+  IPiece piece;
   byte escape_counter = 0;
-  byte level = 0;
+  byte level = 1;
   byte lines = 0;
-  state_changed=false;
+  Serial.println(EsploraTFT.width());
+  Serial.println(EsploraTFT.height());
+  EsploraTFT.background(51,153,51);
+  EsploraTFT.fill(0,0,0);
+  EsploraTFT.rect(49,4,62,122);
+  EsploraTFT.rect(114,4,43,30);
+  DrawSquare(0,0,RED);
+  DrawSquare(1,1,ORANGE);
+  DrawSquare(2,2,YELLOW);
+  DrawSquare(3,3,GREEN);
+  DrawSquare(4,4,CYAN);
+  DrawSquare(5,5,BLUE);
+  DrawSquare(6,6,PURPLE);
+  DrawSquare(7,7,PURPLE);
+  DrawSquare(8,8,PURPLE);
+  DrawSquare(9,9,PURPLE);
+  DrawSquare(8,10,RED);
+  DrawSquare(7,11,ORANGE);
+  DrawSquare(6,12,YELLOW);
+  DrawSquare(5,13,GREEN);
+  DrawSquare(4,14,CYAN);
+  DrawSquare(3,15,BLUE);
+  DrawSquare(2,16,PURPLE);
+  DrawSquare(1,17,PURPLE);
+  DrawSquare(0,18,PURPLE);
+  DrawSquare(1,19,PURPLE);
 
-  
   for(byte x=0; x<10; x++)
   {
     for(byte y=0; y<20; y++)
@@ -53,12 +156,10 @@ void play()
   {
     int button_pressed = waitForInput();
     if(button_pressed==SWITCH_RIGHT)
-    {
-      STATE = MENU;
-      state_changed = true;
-    }    
+      break;  
   }
-
+  level = 1;
+  timer = 500;
   STATE = SCOREBOARD;
 }
 
