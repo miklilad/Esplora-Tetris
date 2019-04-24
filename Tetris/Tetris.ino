@@ -2,61 +2,167 @@
 #include <SPI.h>
 #include <TFT.h>   
 
-const double VERSION = 0.03;
+const double VERSION = 0.04;
 const int HIGH_SCORES_NUM = 8;
 enum STATES {MENU, GAME, SCOREBOARD, CREDITS};
 byte STATE = MENU;
 bool state_changed = true;
 byte MenuPos = 50;
 int HighScores[HIGH_SCORES_NUM];
-enum Colors {RED,ORANGE,YELLOW,PURPLE,BLUE,GREEN,CYAN};
-int timer = 500;
-const byte blockSize = 6;
+enum Colors {RED,ORANGE,YELLOW,PURPLE,BLUE,GREEN,CYAN,BLACK};
+const byte BLOCK_SIZE = 6;
+const byte FIELD_OFFSET_X = 50;
+const byte FIELD_OFFSET_Y = 5;
 
-class Block
-{
-  Colors color;
-  bool occupied;
-  public:
-    Block(Colors color = RED,bool occupied = false) : color(color), occupied(false) {}
-
-    Colors Getcolor() const {return color;}
-    bool IsOccupied() const {return occupied;}
-    
-};
 
 void DrawSquare(byte x, byte y, Colors color)
 {
   switch(color)
   {
-    case RED:     EsploraTFT.fill(255,0,0); break;
-    case ORANGE:  EsploraTFT.fill(255,153,51); break;
-    case YELLOW:  EsploraTFT.fill(255,255,0); break;
-    case PURPLE:  EsploraTFT.fill(153,51,255); break;
-    case BLUE:    EsploraTFT.fill(51,102,255); break;
-    case GREEN:   EsploraTFT.fill(102,255,51); break;
-    case CYAN:    EsploraTFT.fill(51,255,255); break;
+    case RED:     EsploraTFT.fill(0,0,255); break;   //(b,g,r)
+    case ORANGE:  EsploraTFT.fill(51,153,255); break;
+    case YELLOW:  EsploraTFT.fill(0,255,255); break;
+    case PURPLE:  EsploraTFT.fill(255,51,153); break;
+    case BLUE:    EsploraTFT.fill(255,102,51); break;
+    case GREEN:   EsploraTFT.fill(51,255,102); break;
+    case CYAN:    EsploraTFT.fill(255,255,51); break;
+    case BLACK:   EsploraTFT.fill(0,0,0); break;
   }
-  EsploraTFT.rect(x*blockSize+50,y*blockSize+5,blockSize,blockSize);
+  EsploraTFT.rect(x*BLOCK_SIZE+FIELD_OFFSET_X,y*BLOCK_SIZE+FIELD_OFFSET_Y,BLOCK_SIZE,BLOCK_SIZE);
 }
+
+int waitForInput(bool timed = false,int wait = 500)
+{
+  int timePassed = 0;
+  while(Esplora.readButton(SWITCH_DOWN)==HIGH&&
+        Esplora.readButton(SWITCH_LEFT)==HIGH&&
+        Esplora.readButton(SWITCH_UP)==HIGH&&
+        Esplora.readButton(SWITCH_RIGHT)==HIGH)
+  {
+    delay(2);
+    if(timed)
+      timePassed+=2;
+    if(timePassed>wait)
+      return -1;
+  }
+  int button = -1;
+  if(Esplora.readButton(SWITCH_RIGHT)==LOW)
+    button = SWITCH_RIGHT;
+  if(Esplora.readButton(SWITCH_LEFT)==LOW)
+    button = SWITCH_LEFT;
+  if(Esplora.readButton(SWITCH_UP)==LOW)
+    button = SWITCH_UP;
+  if(Esplora.readButton(SWITCH_DOWN)==LOW)
+    button = SWITCH_DOWN;
+  unsigned long t = millis()+200;
+  while((Esplora.readButton(SWITCH_DOWN)==LOW||
+        Esplora.readButton(SWITCH_LEFT)==LOW||
+        Esplora.readButton(SWITCH_UP)==LOW||
+        Esplora.readButton(SWITCH_RIGHT)==LOW)&&millis()<t){delay(2);}
+  return button;
+}
+
+
+struct Block
+{
+  Colors color = BLACK;
+  bool occupied = false;
+  //Block(Colors color = RED,bool occupied = false) : color(color), occupied(occupied) {} 
+};
+
+class Playfield
+{
+  Block field[10][20];
+  public:
+    void Draw() const
+    {
+      EsploraTFT.fill(0,0,0);
+      EsploraTFT.rect(FIELD_OFFSET_X-1,FIELD_OFFSET_Y-1,BLOCK_SIZE*10+2,BLOCK_SIZE*20+2);
+      for(int y=0;y<20;y++)
+      {
+        for(int x=0;x<10;x++)
+          if(field[x][y].occupied)
+            DrawSquare(x,y,field[x][y].color);        
+      }
+    }
+    
+    bool IsOccupied(byte x, byte y) const
+    {
+      return field[x][y].occupied;
+    }
+
+    void PlaceBlock(byte x, byte y, const Block & bl)
+    {
+      field[x][y] = bl;
+    }
+};
 
 class Tetromino
 {
   protected:
+    Colors color;
     byte posX, posY;
+    virtual void Erase() const {}
+    virtual void Draw() const {}
+    virtual void Place(const Playfield & field) const {}
+    virtual bool CheckCollisions(const Playfield & field) {}
   public:
-    Tetromino() {posX = 5; posY = 0;}
-    virtual void Rotate() = 0;
+    Tetromino() {posX = 5; posY = 0; color = BLACK;}
+    virtual void Rotate() {};
+    void MoveLeft()  {Erase(); posX--; Draw();}
+    void MoveRight() {Erase(); posX++; Draw();}
+    void Fall()      {Erase(); posY++; Draw();}
 };
 
-class IPiece : public Tetromino
+class Piece4 : public Tetromino
 {
-  Block blocks[4][4];
-  public:
-    IPiece() 
+  protected:
+    Block blocks[4][4];
+    void Erase() const override
     {
-      Serial.println("IPiece Created");
+      EsploraTFT.stroke(0,0,0);
+      for(int y=0;y<4;y++)
+      {
+        for(int x=0;x<4;x++)   
+          if(blocks[x][y].occupied)
+            DrawSquare(x+posX,y+posY,BLACK);
+      }
+      EsploraTFT.stroke(255,255,255);
     }
+    
+    void Draw() const override
+    {
+      for(int y=0;y<4;y++)
+      {
+        for(int x=0;x<4;x++)   
+          if(blocks[x][y].occupied)
+            DrawSquare(x+posX,y+posY,color);
+      }
+    }
+
+    void Place(const Playfield & field) const override
+    {
+      for(int y=0;y<4;y++)
+      {
+        for(int x=0;x<4;x++)   
+          if(blocks[x][y].occupied)
+            field.PlaceBlock(x+posX,y+posY,blocks[x][y]);
+      }
+    }
+
+    virtual bool CheckCollisions(const Playfield & field) override
+    {
+      for(int y=0;y<4;y++)
+      {
+        for(int x=0;x<4;x++)   
+          if(blocks[x][y].occupied&&field.IsOccupied(x+posX,y+posY))
+            return true;
+      }
+      return false;
+    }
+  public:
+    Piece4() : Tetromino(){}
+    
     void Rotate() override
     {
       
@@ -67,13 +173,60 @@ class Piece3 : public Tetromino
 {
   protected:
     Block blocks[3][3];
+    void Erase() const override
+    {
+      EsploraTFT.stroke(0,0,0);
+      for(int y=0;y<3;y++)
+      {
+        for(int x=0;x<3;x++)   
+          if(blocks[x][y].occupied)
+            DrawSquare(x+posX,y+posY,BLACK);
+      }
+      EsploraTFT.stroke(255,255,255);
+    }
+    
+    void Draw() const override
+    {
+      for(int y=0;y<3;y++)
+      {
+        for(int x=0;x<3;x++)   
+          if(blocks[x][y].occupied)
+            DrawSquare(x+posX,y+posY,color);
+      }
+    }
+
+    void Place(const Playfield & field) const override
+    {
+      for(int y=0;y<3;y++)
+      {
+        for(int x=0;x<3;x++)   
+          if(blocks[x][y].occupied)
+            field.PlaceBlock(x+posX,y+posY,blocks[x][y]);
+      }
+    }
+  public:
+    Piece3() : Tetromino() {}
     void Rotate() override
     {
       
     }
 };
 
-class OPiece : public Piece3
+class IPiece : public Piece4
+{
+  public:
+    IPiece() : Piece4()
+    {
+      color = YELLOW;
+      blocks[0][1].occupied = true;
+      blocks[1][1].occupied = true;
+      blocks[2][1].occupied = true;
+      blocks[3][1].occupied = true;
+      Draw();
+    }
+};
+
+class OPiece : public Piece4
 {
   
 };
@@ -103,63 +256,57 @@ class LPiece : public Piece3
   
 };
 
-class Playfield
-{
-  public:
-    Block field[10][20];
-};
-
 void play()
 {
-  //Block playfield[10][20];
-  IPiece piece;
+  Serial.println("-----------------");
+  Playfield field;
+  int tick = 200;
   byte escape_counter = 0;
   byte level = 1;
   byte lines = 0;
-  Serial.println(EsploraTFT.width());
-  Serial.println(EsploraTFT.height());
-  EsploraTFT.background(51,153,51);
+  EsploraTFT.background(204,153,0);
   EsploraTFT.fill(0,0,0);
-  EsploraTFT.rect(49,4,62,122);
   EsploraTFT.rect(114,4,43,30);
-  DrawSquare(0,0,RED);
-  DrawSquare(1,1,ORANGE);
-  DrawSquare(2,2,YELLOW);
-  DrawSquare(3,3,GREEN);
-  DrawSquare(4,4,CYAN);
-  DrawSquare(5,5,BLUE);
-  DrawSquare(6,6,PURPLE);
-  DrawSquare(7,7,PURPLE);
-  DrawSquare(8,8,PURPLE);
-  DrawSquare(9,9,PURPLE);
-  DrawSquare(8,10,RED);
-  DrawSquare(7,11,ORANGE);
-  DrawSquare(6,12,YELLOW);
-  DrawSquare(5,13,GREEN);
-  DrawSquare(4,14,CYAN);
-  DrawSquare(3,15,BLUE);
-  DrawSquare(2,16,PURPLE);
-  DrawSquare(1,17,PURPLE);
-  DrawSquare(0,18,PURPLE);
-  DrawSquare(1,19,PURPLE);
+  field.Draw();
 
-  for(byte x=0; x<10; x++)
-  {
-    for(byte y=0; y<20; y++)
+  Tetromino * current = new IPiece();
+  unsigned long timer = millis();
+  while(true)
+  {    
+    //unsigned long t = millis();
+    int button_pressed = waitForInput(true,tick);
+    if(button_pressed==SWITCH_RIGHT)
+    {
+      current->MoveRight();
+    }
+    if(button_pressed==SWITCH_LEFT)
+    {
+      current->MoveLeft();
+    }
+    if(button_pressed==SWITCH_UP)
     {
       
     }
+    if(button_pressed==SWITCH_DOWN)
+    {
+      
+    }
+    if(button_pressed==SWITCH_DOWN)
+    {
+      escape_counter++;
+    }
+    else
+      escape_counter = 0;
+    if(millis()>timer+tick)
+    {
+      timer = millis();
+      current->Fall();
+    }
+    if(escape_counter==8)
+      break;
+    Serial.println(button_pressed);
   }
-
-
-  while(true)
-  {
-    int button_pressed = waitForInput();
-    if(button_pressed==SWITCH_RIGHT)
-      break;  
-  }
-  level = 1;
-  timer = 500;
+  delete current;
   STATE = SCOREBOARD;
 }
 
@@ -258,28 +405,6 @@ void display_credits()
 }
 
 
-int waitForInput()
-{
-  while(Esplora.readButton(SWITCH_DOWN)==HIGH&&
-        Esplora.readButton(SWITCH_LEFT)==HIGH&&
-        Esplora.readButton(SWITCH_UP)==HIGH&&
-        Esplora.readButton(SWITCH_RIGHT)==HIGH){delay(2);}
-  int button = -1;
-  if(Esplora.readButton(SWITCH_RIGHT)==LOW)
-    button = SWITCH_RIGHT;
-  if(Esplora.readButton(SWITCH_LEFT)==LOW)
-    button = SWITCH_LEFT;
-  if(Esplora.readButton(SWITCH_UP)==LOW)
-    button = SWITCH_UP;
-  if(Esplora.readButton(SWITCH_DOWN)==LOW)
-    button = SWITCH_DOWN;
-  unsigned long t = millis()+200;
-  while((Esplora.readButton(SWITCH_DOWN)==LOW||
-        Esplora.readButton(SWITCH_LEFT)==LOW||
-        Esplora.readButton(SWITCH_UP)==LOW||
-        Esplora.readButton(SWITCH_RIGHT)==LOW)&&millis()<t){delay(2);}
-  return button;
-}
 
 void setup()
 {
