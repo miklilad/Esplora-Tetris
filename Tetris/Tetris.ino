@@ -2,7 +2,7 @@
 #include <SPI.h>
 #include <TFT.h>
 
-const double VERSION = 0.04;
+const double VERSION = 0.06;
 const int HIGH_SCORES_NUM = 8;
 enum STATES {MENU, GAME, SCOREBOARD, CREDITS};
 byte STATE = MENU;
@@ -15,7 +15,7 @@ const byte FIELD_OFFSET_X = 50;
 const byte FIELD_OFFSET_Y = 5;
 
 
-void DrawSquare(byte x, byte y, Colors color)
+void DrawSquare(int x, int y, Colors color)
 {
   switch (color)
   {
@@ -28,7 +28,9 @@ void DrawSquare(byte x, byte y, Colors color)
     case CYAN:    EsploraTFT.fill(255, 255, 51); break;
     case BLACK:   EsploraTFT.fill(0, 0, 0); break;
   }
-  EsploraTFT.rect(x * BLOCK_SIZE + FIELD_OFFSET_X, y * BLOCK_SIZE + FIELD_OFFSET_Y, BLOCK_SIZE, BLOCK_SIZE);
+  byte X = x * BLOCK_SIZE + FIELD_OFFSET_X;
+  byte Y = y * BLOCK_SIZE + FIELD_OFFSET_Y;
+  EsploraTFT.rect(X,Y, BLOCK_SIZE, BLOCK_SIZE);
 }
 
 int waitForInput(bool timed = false, int wait = 500)
@@ -93,9 +95,37 @@ class Playfield
       return field[x][y].occupied;
     }
 
-    void PlaceBlock(byte x, byte y, const Block & bl)
+    void PlaceBlock(byte x, byte y, const Block & bl, Colors color)
     {
       field[x][y] = bl;
+      field[x][y].color = color;
+    }
+
+    void CheckRows()
+    {
+      bool changed = false;
+      for(byte row=0;row<20;row++)
+      {
+        for(byte col=0;col<10;col++)
+        {
+          if(!field[col][row].occupied)
+            break;
+          if(col==9)
+          {
+            changed = true;
+            byte y = row;
+            Serial.println("-----------------");
+            while(y>0)
+            {
+              for(byte x = 0; x<10;x++)
+                field[x][y] = field[x][y-1];
+              y--;
+            }
+          }
+        }
+      }
+      if(changed)
+        Draw();
     }
 };
 
@@ -106,7 +136,6 @@ class Tetromino
     byte posX, posY;
     bool placed;
     virtual void Erase() const {}
-    virtual void Draw() const {}
     virtual void Place(const Playfield & field) {}
     virtual bool CheckCollisions(const Playfield & field) {
       return false;
@@ -118,7 +147,9 @@ class Tetromino
       color = BLACK;
       placed = false;
     }
-    virtual void Rotate() {};
+    virtual void Rotate(const Playfield &) {};
+    virtual void Draw() const {}
+    virtual void Preview() const {};
     void MoveLeft(const Playfield & field)
     {
       posX--;
@@ -161,7 +192,8 @@ class Tetromino
         Place(field);
       }
     }
-    bool IsPlaced()    {
+    bool IsPlaced() 
+    {
       return placed;
     }
 };
@@ -182,23 +214,13 @@ class Piece4 : public Tetromino
       EsploraTFT.stroke(255, 255, 255);
     }
 
-    void Draw() const override
-    {
-      for (int y = 0; y < 4; y++)
-      {
-        for (int x = 0; x < 4; x++)
-          if (blocks[x][y].occupied)
-            DrawSquare(x + posX, y + posY, color);
-      }
-    }
-
     void Place(const Playfield & field) override
     {
       for (int y = 0; y < 4; y++)
       {
         for (int x = 0; x < 4; x++)
           if (blocks[x][y].occupied)
-            field.PlaceBlock(x + posX, y + posY, blocks[x][y]);
+            field.PlaceBlock(x + posX, y + posY, blocks[x][y], color);
       }
       placed = true;
     }
@@ -221,9 +243,30 @@ class Piece4 : public Tetromino
   public:
     Piece4() : Tetromino() {}
 
-    void Rotate() override
+    void Draw() const override
     {
+      for (int y = 0; y < 4; y++)
+      {
+        for (int x = 0; x < 4; x++)
+          if (blocks[x][y].occupied)
+            DrawSquare(x + posX, y + posY, color);
+      }
+    }
 
+    virtual void Preview() const override
+    {
+      
+      for (int y = 0; y < 4; y++)
+      {
+        for (int x = 0; x < 4; x++)
+          if (blocks[x][y].occupied)
+             DrawSquare(x-6, y+1, color);
+      }
+    }
+
+    void Rotate(const Playfield & field) override
+    {
+      
     }
 };
 
@@ -243,16 +286,6 @@ class Piece3 : public Tetromino
       EsploraTFT.stroke(255, 255, 255);
     }
 
-    void Draw() const override
-    {
-      for (int y = 0; y < 3; y++)
-      {
-        for (int x = 0; x < 3; x++)
-          if (blocks[x][y].occupied)
-            DrawSquare(x + posX, y + posY, color);
-      }
-    }
-
     void Place(const Playfield & field) override
     {
       for (int y = 0; y < 3; y++)
@@ -260,7 +293,7 @@ class Piece3 : public Tetromino
         for (int x = 0; x < 3; x++)
         {
           if (blocks[x][y].occupied)
-            field.PlaceBlock(x + posX, y + posY, blocks[x][y]);
+            field.PlaceBlock(x + posX, y + posY, blocks[x][y], color);
         }
       }
       placed = true;
@@ -282,9 +315,30 @@ class Piece3 : public Tetromino
     }
   public:
     Piece3() : Tetromino() {}
-    void Rotate() override
-    {
 
+    void Draw() const override
+    {
+      for (int y = 0; y < 3; y++)
+      {
+        for (int x = 0; x < 3; x++)
+          if (blocks[x][y].occupied)
+            DrawSquare(x + posX, y + posY, color);
+      }
+    }
+    
+    virtual void Preview() const override
+    {
+      for (int y = 0; y < 3; y++)
+      {
+        for (int x = 0; x < 3; x++)
+          if (blocks[x][y].occupied)
+             DrawSquare(x-6, y+1, color);
+      }
+    }
+ 
+    void Rotate(const Playfield & field) override
+    {
+      //Block copy()
     }
 };
 
@@ -298,7 +352,6 @@ class IPiece : public Piece4
       blocks[1][1].occupied = true;
       blocks[2][1].occupied = true;
       blocks[3][1].occupied = true;
-      Draw();
     }
 };
 
@@ -312,7 +365,6 @@ class OPiece : public Piece4
       blocks[1][2].occupied = true;
       blocks[2][1].occupied = true;
       blocks[2][2].occupied = true;
-      Draw();
     }
 };
 
@@ -326,7 +378,6 @@ class TPiece : public Piece3
       blocks[1][0].occupied = true;
       blocks[1][1].occupied = true;
       blocks[2][1].occupied = true;
-      Draw();
     }
 };
 
@@ -340,7 +391,6 @@ class SPiece : public Piece3
       blocks[1][0].occupied = true;
       blocks[1][1].occupied = true;
       blocks[2][0].occupied = true;
-      Draw();
     }
 };
 
@@ -354,7 +404,6 @@ class ZPiece : public Piece3
       blocks[1][0].occupied = true;
       blocks[1][1].occupied = true;
       blocks[2][1].occupied = true;
-      Draw();
     }
 };
 
@@ -368,7 +417,6 @@ class JPiece : public Piece3
       blocks[1][1].occupied = true;
       blocks[1][2].occupied = true;
       blocks[0][2].occupied = true;
-      Draw();
     }
 };
 
@@ -382,12 +430,10 @@ class LPiece : public Piece3
       blocks[1][1].occupied = true;
       blocks[1][2].occupied = true;
       blocks[2][2].occupied = true;
-      Draw();
     }
 };
 
-
-/* Tetromino * NewPiece()
+class Tetromino * NewPiece()
 {
   long rnd = random(7);
   switch (rnd)
@@ -400,7 +446,7 @@ class LPiece : public Piece3
     case 5: return new SPiece();
     case 6: return new ZPiece();
   }
-} */
+}
 
 void play()
 {
@@ -412,49 +458,40 @@ void play()
   byte lines = 0;
   EsploraTFT.background(204, 153, 0);
   EsploraTFT.fill(0, 0, 0);
-  EsploraTFT.rect(114, 4, 43, 30);
+  EsploraTFT.rect(114, 4, 43, 30);        //Score Rect
   field.Draw();
 
-  Tetromino * current = new IPiece();
+  Tetromino * current = NewPiece();
+  Tetromino * next = NewPiece();
   unsigned long timer = millis();
+  current->Draw();
+  EsploraTFT.fill(0,0,0);
+  EsploraTFT.rect(4,4,42,30);
+  next->Preview();
   while (true)
   {
     if (current->IsPlaced())
     {
       delete current;
-      long rnd = random(7);
-      switch (rnd)
-      {
-        case 0: current = new IPiece(); break;
-        case 1: current = new OPiece(); break;
-        case 2: current = new LPiece(); break;
-        case 3: current = new JPiece(); break;
-        case 4: current = new TPiece(); break;
-        case 5: current = new SPiece(); break;
-        case 6: current = new ZPiece(); break;
-      }
+      current = next;
+      next = NewPiece();
+      field.CheckRows();
+      current->Draw();
+      EsploraTFT.fill(0,0,0);
+      EsploraTFT.rect(4,4,43,30);
+      next->Preview();
     }
-    //unsigned long t = millis();
     int button_pressed = waitForInput(true, tick);
     if (button_pressed == SWITCH_RIGHT)
-    {
       current->MoveRight(field);
-    }
     if (button_pressed == SWITCH_LEFT)
-    {
       current->MoveLeft(field);
-    }
+    if (button_pressed == SWITCH_DOWN)
+      current->Fall(field);
     if (button_pressed == SWITCH_UP)
     {
-
-    }
-    if (button_pressed == SWITCH_DOWN)
-    {
-
-    }
-    if (button_pressed == SWITCH_DOWN)
-    {
       escape_counter++;
+      current->Rotate(field);
     }
     else
       escape_counter = 0;
@@ -468,6 +505,7 @@ void play()
     Serial.println(button_pressed);
   }
   delete current;
+  delete next;
   STATE = SCOREBOARD;
 }
 
@@ -564,8 +602,6 @@ void display_credits()
     state_changed = true;
   }
 }
-
-
 
 void setup()
 {
