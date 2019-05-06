@@ -2,13 +2,13 @@
 #include <SPI.h>
 #include <TFT.h>
 
-const double VERSION = 0.06;
+const double VERSION = 0.07;
 const int HIGH_SCORES_NUM = 8;
 enum STATES {MENU, GAME, SCOREBOARD, CREDITS};
 byte STATE = MENU;
 bool state_changed = true;
 byte MenuPos = 50;
-int HighScores[HIGH_SCORES_NUM];
+unsigned long HighScores[HIGH_SCORES_NUM];
 enum Colors {RED, ORANGE, YELLOW, PURPLE, BLUE, GREEN, CYAN, BLACK};
 const byte BLOCK_SIZE = 6;
 const byte FIELD_OFFSET_X = 50;
@@ -71,13 +71,26 @@ struct Block
 {
   Colors color = BLACK;
   bool occupied = false;
-  //Block(Colors color = RED,bool occupied = false) : color(color), occupied(occupied) {}
 };
 
 class Playfield
 {
-    Block field[10][20];
+  Block field[10][20];
+  unsigned long score;
+
+  void PrintScore() const
+  {
+    EsploraTFT.fill(0, 0, 0);
+    EsploraTFT.rect(114, 4, 43, 30);
+    EsploraTFT.textSize(1); 
+    EsploraTFT.text("Score:",115,5);
+    char text[20];
+    String(score).toCharArray(text, 20);
+    EsploraTFT.text(text,118,13);
+  }
+  
   public:
+    Playfield() {score = 0; PrintScore();}
     void Draw() const
     {
       EsploraTFT.fill(0, 0, 0);
@@ -89,6 +102,8 @@ class Playfield
             DrawSquare(x, y, field[x][y].color);
       }
     }
+
+    unsigned long GetScore() {return score;}
 
     bool IsOccupied(byte x, byte y) const
     {
@@ -103,7 +118,7 @@ class Playfield
 
     void CheckRows()
     {
-      bool changed = false;
+      byte changed = 0;
       for(byte row=0;row<20;row++)
       {
         for(byte col=0;col<10;col++)
@@ -112,9 +127,8 @@ class Playfield
             break;
           if(col==9)
           {
-            changed = true;
+            changed++;
             byte y = row;
-            Serial.println("-----------------");
             while(y>0)
             {
               for(byte x = 0; x<10;x++)
@@ -125,7 +139,17 @@ class Playfield
         }
       }
       if(changed)
+      {
+        switch(changed)
+        {
+          case 1: score += 40;    break;
+          case 2: score += 100;   break;
+          case 3: score += 300;   break;
+          case 4: score += 1200;  break;
+        }
         Draw();
+        PrintScore();
+      }
     }
 };
 
@@ -137,15 +161,15 @@ class Tetromino
     bool placed;
     virtual void Erase() const {}
     virtual void Place(const Playfield & field) {}
-    virtual bool CheckCollisions(const Playfield & field) {
-      return false;
-    }
   public:
     Tetromino() {
       posX = 5;
       posY = 0;
       color = BLACK;
       placed = false;
+    }
+    virtual bool CheckCollisions(const Playfield & field) {
+      return false;
     }
     virtual void Rotate(const Playfield &) {};
     virtual void Draw() const {}
@@ -225,6 +249,9 @@ class Piece4 : public Tetromino
       placed = true;
     }
 
+  public:
+    Piece4() : Tetromino() {}
+
     virtual bool CheckCollisions(const Playfield & field) override
     {
       for (int y = 0; y < 4; y++)
@@ -239,9 +266,6 @@ class Piece4 : public Tetromino
       }
       return false;
     }
-
-  public:
-    Piece4() : Tetromino() {}
 
     void Draw() const override
     {
@@ -266,7 +290,32 @@ class Piece4 : public Tetromino
 
     void Rotate(const Playfield & field) override
     {
-      
+      Block rotated[4][4];
+      Block copy[4][4];
+      Erase();
+      for (int y = 0; y < 4; y++)
+      {
+        int Y = map(y,0,3,3,0);
+        for (int x = 0; x < 4; x++)
+          rotated[x][Y] = blocks[y][x];
+      }
+      for (int y = 0; y < 4; y++)
+      {
+        for (int x = 0; x < 4; x++)
+        {
+          copy[x][y] = blocks[x][y];
+          blocks[x][y] = rotated[x][y]; 
+        }
+      }
+      if(CheckCollisions(field))
+      {
+        for (int y = 0; y < 4; y++)
+        {
+          for (int x = 0; x < 4; x++)
+            blocks[x][y] = copy[x][y];
+        }   
+      } 
+      Draw();
     }
 };
 
@@ -298,6 +347,8 @@ class Piece3 : public Tetromino
       }
       placed = true;
     }
+  public:
+    Piece3() : Tetromino() {}
 
     virtual bool CheckCollisions(const Playfield & field) override
     {
@@ -313,8 +364,6 @@ class Piece3 : public Tetromino
       }
       return false;
     }
-  public:
-    Piece3() : Tetromino() {}
 
     void Draw() const override
     {
@@ -338,7 +387,32 @@ class Piece3 : public Tetromino
  
     void Rotate(const Playfield & field) override
     {
-      //Block copy()
+      Block rotated[3][3];
+      Block copy[3][3];
+      Erase();
+      for (int y = 0; y < 3; y++)
+      {
+        int Y = map(y,0,2,2,0);
+        for (int x = 0; x < 3; x++)
+          rotated[x][Y] = blocks[y][x];
+      }
+      for (int y = 0; y < 3; y++)
+      {
+        for (int x = 0; x < 3; x++)
+        {
+          copy[x][y] = blocks[x][y];
+          blocks[x][y] = rotated[x][y]; 
+        }
+      }
+      if(CheckCollisions(field))
+      {
+        for (int y = 0; y < 3; y++)
+        {
+          for (int x = 0; x < 3; x++)
+            blocks[x][y] = copy[x][y];
+        }   
+      } 
+      Draw();
     }
 };
 
@@ -451,16 +525,12 @@ class Tetromino * NewPiece()
 void play()
 {
   Serial.println("-----------------");
-  Playfield field;
+
   int tick = 200;
   byte escape_counter = 0;
-  byte level = 1;
-  byte lines = 0;
   EsploraTFT.background(204, 153, 0);
-  EsploraTFT.fill(0, 0, 0);
-  EsploraTFT.rect(114, 4, 43, 30);        //Score Rect
+  Playfield field;
   field.Draw();
-
   Tetromino * current = NewPiece();
   Tetromino * next = NewPiece();
   unsigned long timer = millis();
@@ -476,10 +546,23 @@ void play()
       current = next;
       next = NewPiece();
       field.CheckRows();
-      current->Draw();
-      EsploraTFT.fill(0,0,0);
-      EsploraTFT.rect(4,4,43,30);
-      next->Preview();
+      if(!current->CheckCollisions(field))
+      {
+        current->Draw();
+        EsploraTFT.fill(0,0,0);
+        EsploraTFT.rect(4,4,43,30);
+        next->Preview(); 
+      }
+      else
+      {
+        EsploraTFT.textSize(3);
+        EsploraTFT.stroke(0,0,255);
+        EsploraTFT.text("GAME",45,40);
+        EsploraTFT.text("OVER",45,80);
+        EsploraTFT.stroke(255,255,255);
+        delay(2000);   
+        break; 
+      }
     }
     int button_pressed = waitForInput(true, tick);
     if (button_pressed == SWITCH_RIGHT)
@@ -506,6 +589,17 @@ void play()
   }
   delete current;
   delete next;
+  unsigned long score = field.GetScore();         //Saving score
+  if(score>HighScores[HIGH_SCORES_NUM])
+    HighScores[HIGH_SCORES_NUM] = score;
+  for(int i=HIGH_SCORES_NUM;i>=0;i--)
+  {
+    if(i!=0&&HighScores[i]>HighScores[i-1])
+    {
+      HighScores[i] = HighScores[i-1];
+      HighScores[i-1] = score;
+    }
+  }
   STATE = SCOREBOARD;
 }
 
