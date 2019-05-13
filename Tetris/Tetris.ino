@@ -1,7 +1,9 @@
+//Created by Ladislav Miklík as a semestral work in BI-ARD course at CTU
+
 #include <Esplora.h>
 #include <SPI.h>
 #include <TFT.h>
-
+ 
 const double VERSION = 0.07;
 const int HIGH_SCORES_NUM = 8;
 enum STATES {MENU, GAME, SCOREBOARD, CREDITS};
@@ -14,7 +16,7 @@ const byte BLOCK_SIZE = 6;
 const byte FIELD_OFFSET_X = 50;
 const byte FIELD_OFFSET_Y = 5;
 
-
+//Draws square at a specified loacation (x and y corresponds to block size grid coordinates)
 void DrawSquare(int x, int y, Colors color)
 {
   switch (color)
@@ -33,6 +35,7 @@ void DrawSquare(int x, int y, Colors color)
   EsploraTFT.rect(X,Y, BLOCK_SIZE, BLOCK_SIZE);
 }
 
+//Either waits for the next user input, or returns -1 if certain time threshold was reached
 int waitForInput(bool timed = false, int wait = 500)
 {
   int timePassed = 0;
@@ -66,7 +69,7 @@ int waitForInput(bool timed = false, int wait = 500)
   return button;
 }
 
-
+//Playfield block
 struct Block
 {
   Colors color = BLACK;
@@ -91,6 +94,8 @@ class Playfield
   
   public:
     Playfield() {score = 0; PrintScore();}
+    
+    //Draws the current state of playfield
     void Draw() const
     {
       EsploraTFT.fill(0, 0, 0);
@@ -110,12 +115,14 @@ class Playfield
       return field[x][y].occupied;
     }
 
+    //Places one block into field
     void PlaceBlock(byte x, byte y, const Block & bl, Colors color)
     {
       field[x][y] = bl;
       field[x][y].color = color;
     }
 
+    //Checks if any row was completly filled ... if so, it clears that row and pushes the rows above down
     void CheckRows()
     {
       byte changed = 0;
@@ -168,12 +175,14 @@ class Tetromino
       color = BLACK;
       placed = false;
     }
+
+    //Checks if Tetromino collided with other blocks from playfield
     virtual bool CheckCollisions(const Playfield & field) {
       return false;
     }
-    virtual void Rotate(const Playfield &) {};
-    virtual void Draw() const {}
-    virtual void Preview() const {};
+    virtual void Rotate(const Playfield &) {}           //Rotates tetromino
+    virtual void Draw() const {}                        //Draws tetromino
+    virtual void Preview() const {}                     //Shows tetromino in upper left corner
     void MoveLeft(const Playfield & field)
     {
       posX--;
@@ -216,12 +225,13 @@ class Tetromino
         Place(field);
       }
     }
-    bool IsPlaced() 
+    bool IsPlaced()                     //Returns true if the tetromino was placed
     {
       return placed;
     }
 };
 
+//Tetrominoes that need 4x4 matrix
 class Piece4 : public Tetromino
 {
   protected:
@@ -319,6 +329,7 @@ class Piece4 : public Tetromino
     }
 };
 
+//Tetrominoes that need 3x3 matrix
 class Piece3 : public Tetromino
 {
   protected:
@@ -416,6 +427,7 @@ class Piece3 : public Tetromino
     }
 };
 
+//Following is definition of all 7 tetrominoes
 class IPiece : public Piece4
 {
   public:
@@ -507,6 +519,7 @@ class LPiece : public Piece3
     }
 };
 
+//Randomized piece generation
 class Tetromino * NewPiece()
 {
   long rnd = random(7);
@@ -522,6 +535,7 @@ class Tetromino * NewPiece()
   }
 }
 
+//Called when the State is set to GAME
 void play()
 {
   Serial.println("-----------------");
@@ -603,6 +617,7 @@ void play()
   STATE = SCOREBOARD;
 }
 
+//Called when the State is set to MENU
 void display_menu()
 {
   if (state_changed)
@@ -645,6 +660,7 @@ void display_menu()
   Serial.println(button_pressed);
 }
 
+//Called when the State is set to SCOREBOARD
 void display_scoreboard()
 {
   if (state_changed)
@@ -673,6 +689,7 @@ void display_scoreboard()
   }
 }
 
+//Called when the State is set to CREDITS
 void display_credits()
 {
   if (state_changed)
